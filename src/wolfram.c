@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -5,13 +6,17 @@
 #include "glad/gl.h"
 #include <GLFW/glfw3.h>
 
-#define WIN_WIDTH 512
-#define WIN_HEIGHT 512
-#define WIN_TITLE "wolfram"
+#define WIN_WIDTH 32
+#define WIN_HEIGHT 16
+#define SCALE 8
+#define TITLE "wolfram"
 
-unsigned char* display_buffer;
+unsigned char rule = 0;
 
 void print_version(void);
+void get_next_generation(
+	unsigned char* dst, const unsigned char* src, size_t w
+);
 
 float map(float x, float min_i, float max_i, float min_o, float max_o) {
 	float range_i = max_i - min_i;
@@ -20,7 +25,20 @@ float map(float x, float min_i, float max_i, float min_o, float max_o) {
 	return (x - min_i) * (range_o / range_i) + min_o;
 }
 
-int main(void) {
+int main(int argc, char* argv[]) {
+	if (argc != 2) {
+		printf("usage: %s <rule>\n", argv[0]);
+		exit(1);
+	}
+
+	long r = strtol(argv[1], NULL, 10);
+	if (r < 0 || r > 255) {
+		printf("Please enter a rule number between 0 and 255\n");
+		exit(1);
+	}
+
+	rule = (unsigned char)r;
+
 	glfwInit();
 	/* 4.3 required for debug context */
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
@@ -29,7 +47,7 @@ int main(void) {
 	glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GL_TRUE);
 
 	GLFWwindow* window = glfwCreateWindow(
-		WIN_WIDTH, WIN_HEIGHT, WIN_TITLE, NULL, NULL
+		WIN_WIDTH * SCALE, WIN_HEIGHT * SCALE, TITLE, NULL, NULL
 	);
 	if (window == NULL) {
 		const char* msg = NULL;
@@ -99,7 +117,7 @@ int main(void) {
 	"out vec4 FragColor;\n"
 	"uniform sampler2D texture0;\n"
 	"void main () {\n"
-	"	FragColor = texture(texture0, f_tex_coords);\n"
+	"	FragColor = vec4(texture(texture0, f_tex_coords).rrr, 1.0);\n"
 	"}\n";
 	glShaderSource(fshader_id, 1, &fshader_string, NULL);
 	glCompileShader(fshader_id);
@@ -119,25 +137,24 @@ int main(void) {
 	/* shader program uniforms *******************************************/
 	GLfloat mvp_matrix[] = {
 		 2.0,  0.0, 0.0, 0.0,
-		 0.0,  2.0, 0.0, 0.0,
+		 0.0, -2.0, 0.0, 0.0,
 		 0.0,  0.0, 1.0, 0.0,
-		-1.0, -1.0, 0.0, 1.0,
+		-1.0,  1.0, 0.0, 1.0,
 	};
 
 	const GLint loc = glGetUniformLocation(shader_program, "mvp_matrix");
 	glUniformMatrix4fv(loc, 1, GL_FALSE, (GLfloat*)(mvp_matrix));
 
 	/* display buffer/texture init ***************************************/
-	display_buffer = malloc(WIN_WIDTH * WIN_HEIGHT * 4);
-	memset(display_buffer, 0, WIN_WIDTH * WIN_HEIGHT * 4);
+	unsigned char* display_buffer = malloc(WIN_WIDTH * WIN_HEIGHT);
+	memset(display_buffer, 255, WIN_WIDTH * WIN_HEIGHT);
+	display_buffer[WIN_WIDTH / 2] = 0;
 
-	for (size_t y = 0; y < WIN_HEIGHT; ++y) {
-		size_t offset = y * WIN_WIDTH;
-		for (size_t x = 0; x < WIN_WIDTH; ++x) {
-			size_t index = (x + offset) * 4;
-			display_buffer[index] = map(x, 0, WIN_WIDTH, 0, 255);
-			display_buffer[index+1] = map(y, 0, WIN_HEIGHT, 0, 255);
-		}
+	for (size_t i = 0; i < WIN_HEIGHT - 1; ++i) {
+		unsigned char* current = display_buffer + (WIN_WIDTH * i);
+		unsigned char* next = current + WIN_WIDTH;
+
+		get_next_generation(next, current, WIN_WIDTH);
 	}
 
 	GLuint display_texture;
@@ -152,9 +169,9 @@ int main(void) {
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
 	glTexImage2D(
-		GL_TEXTURE_2D, 0, GL_RGBA,
+		GL_TEXTURE_2D, 0, GL_RED,
 		WIN_WIDTH, WIN_HEIGHT,
-		0, GL_RGBA, GL_UNSIGNED_BYTE, display_buffer
+		0, GL_RED, GL_UNSIGNED_BYTE, display_buffer
 	);
 	glGenerateMipmap(GL_TEXTURE_2D);
 
@@ -172,10 +189,46 @@ int main(void) {
 		glfwSwapBuffers(window);
 	}
 
+	free(display_buffer);
+
 	glDeleteProgram(shader_program);
 	glfwTerminate();
 
 	return 0;
+}
+
+void get_next_generation(
+	unsigned char* dst, const unsigned char* src, size_t w
+) {
+	/* needed for alignment */
+	dst[0] = 255;
+
+	/* full neighbours */
+	for (size_t i = 1; i < w; ++i) {
+		size_t left = i - 1;
+		size_t right = i + 1;
+
+		/* wrap around edges */
+		if (i == 1) {
+			left = w - 1;
+		} else if (i == w - 1) {
+			right = 1;
+		}
+
+		/* convert to rule index */
+		char ri = 0;
+		if (src[left] == 0) {
+			ri |= 4;
+		}
+		if (src[i] == 0) {
+			ri |= 2;
+		}
+		if (src[right] == 0) {
+			ri |= 1;
+		}
+
+		dst[i] = ((rule >> ri) & 1) ? 0 : 255;
+	}
 }
 
 void print_version(void) {

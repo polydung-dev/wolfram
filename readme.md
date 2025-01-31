@@ -1,5 +1,11 @@
 # Wolfram Elementary Cellular Automata
 
+Generates a 31*16 image of an elementary cellular automata.
+
+Note: The first column is always blank, due to memory alignment requirements.
+
+- see: https://mathworld.wolfram.com/ElementaryCellularAutomaton.html
+
 ## Requirements
 
 - [GLFW](https://www.glfw.org/)
@@ -8,7 +14,7 @@
 
 ```
 $ make
-$ ./out/wolfram
+$ ./out/wolfram <rule>
 ```
 
 ## GLAD

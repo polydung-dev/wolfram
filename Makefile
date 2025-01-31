@@ -1,5 +1,5 @@
 CFLAGS+=-g3 -O3 -MMD -std=c99 -pedantic
-LDFLAGS+=-lglfw
+LDFLAGS+=-lglfw -lm
 
 ## warnings
 CFLAGS+=-Wall -Wextra
