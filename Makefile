@@ -14,11 +14,11 @@ CFLAGS+=-I./vendor
 sources=$(wildcard src/*.c) $(wildcard src/*/*.c)
 objects=$(patsubst src/%.c,build/%.o,$(sources))
 depends=$(objects:.o=.d)
-builddirs=$(sort $(dir $(objects))) build/vendor/glad/
+builddirs=$(sort $(dir $(objects))) build/vendor/glad/ build/vendor/stb/
 
 SUFFIXES=.c .o .a
 
-all: $(builddirs) lib/ lib/libglad.a .WAIT  out/ out/wolfram
+all: $(builddirs) lib/ lib/libglad.a lib/libstb.a .WAIT  out/ out/wolfram
 
 %/:
 	mkdir -p $@
@@ -26,7 +26,7 @@ all: $(builddirs) lib/ lib/libglad.a .WAIT  out/ out/wolfram
 -include $(depends)
 
 out/wolfram: $(objects)
-	$(CC) $(LDFLAGS) -o $@ $^ lib/libglad.a
+	$(CC) $(LDFLAGS) -o $@ $^ lib/libglad.a lib/libstb.a
 
 build/%.o: src/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -35,6 +35,9 @@ build/vendor/%.o: vendor/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 lib/libglad.a: build/vendor/glad/gl.o
+	$(AR) rcs $@ $?
+
+lib/libstb.a: build/vendor/stb/stb_image_write.o
 	$(AR) rcs $@ $?
 
 clean:

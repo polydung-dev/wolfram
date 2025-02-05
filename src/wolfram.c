@@ -6,6 +6,9 @@
 #include "glad/gl.h"
 #include <GLFW/glfw3.h>
 
+#include "stb/stb_image_write.h"
+
+
 #define WIN_WIDTH 32
 #define WIN_HEIGHT 16
 #define SCALE 8
@@ -17,6 +20,7 @@ void print_version(void);
 void get_next_generation(
 	unsigned char* dst, const unsigned char* src, size_t w
 );
+void save_image();
 
 float map(float x, float min_i, float max_i, float min_o, float max_o) {
 	float range_i = max_i - min_i;
@@ -177,6 +181,8 @@ int main(int argc, char* argv[]) {
 
 	print_version();
 
+	int x = 1;
+
 	while(!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
 
@@ -187,6 +193,11 @@ int main(int argc, char* argv[]) {
 		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_BYTE, NULL);
 
 		glfwSwapBuffers(window);
+
+		if (x != 0) {
+			x = 0;
+			save_image();
+		}
 	}
 
 	free(display_buffer);
@@ -243,4 +254,19 @@ void print_version(void) {
 		printf("revision %i", rev);
 	}
 	printf("\n");
+}
+
+void save_image() {
+	uint8_t* pixels = malloc(WIN_WIDTH * WIN_HEIGHT * SCALE * SCALE);
+	glReadBuffer(GL_FRONT);
+	glReadPixels(
+		0, 0, WIN_WIDTH * SCALE, WIN_HEIGHT * SCALE,
+		GL_RED, GL_UNSIGNED_BYTE, pixels
+	);
+	stbi_flip_vertically_on_write(1);
+	stbi_write_bmp(
+		"out.bmp", WIN_WIDTH * SCALE, WIN_HEIGHT * SCALE, 1, pixels
+	);
+
+	free(pixels);
 }
