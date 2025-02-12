@@ -6,17 +6,20 @@
 #include "glad/gl.h"
 #include <GLFW/glfw3.h>
 
-#define WIN_WIDTH 32
-#define WIN_HEIGHT 16
-#define SCALE 8
+#include "stb/stb_image_write.h"
+
+#define WIN_WIDTH 640
+#define WIN_HEIGHT 480
 #define TITLE "wolfram"
 
-unsigned char rule = 0;
+#define PIXEL_SET   0xffffffff
+#define PIXEL_CLEAR 0x000000ff
+
+uint8_t rule = 0;
 
 void print_version(void);
-void get_next_generation(
-	unsigned char* dst, const unsigned char* src, size_t w
-);
+void get_next_generation(uint32_t* dst, const uint32_t* src, size_t w);
+void save_image();
 
 float map(float x, float min_i, float max_i, float min_o, float max_o) {
 	float range_i = max_i - min_i;
@@ -37,7 +40,7 @@ int main(int argc, char* argv[]) {
 		exit(1);
 	}
 
-	rule = (unsigned char)r;
+	rule = (uint8_t)r;
 
 	glfwInit();
 	/* 4.3 required for debug context */
@@ -47,7 +50,7 @@ int main(int argc, char* argv[]) {
 	glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GL_TRUE);
 
 	GLFWwindow* window = glfwCreateWindow(
-		WIN_WIDTH * SCALE, WIN_HEIGHT * SCALE, TITLE, NULL, NULL
+		WIN_WIDTH, WIN_HEIGHT, TITLE, NULL, NULL
 	);
 	if (window == NULL) {
 		const char* msg = NULL;
@@ -117,7 +120,7 @@ int main(int argc, char* argv[]) {
 	"out vec4 FragColor;\n"
 	"uniform sampler2D texture0;\n"
 	"void main () {\n"
-	"	FragColor = vec4(texture(texture0, f_tex_coords).rrr, 1.0);\n"
+	"	FragColor = texture(texture0, f_tex_coords);\n"
 	"}\n";
 	glShaderSource(fshader_id, 1, &fshader_string, NULL);
 	glCompileShader(fshader_id);
@@ -146,13 +149,15 @@ int main(int argc, char* argv[]) {
 	glUniformMatrix4fv(loc, 1, GL_FALSE, (GLfloat*)(mvp_matrix));
 
 	/* display buffer/texture init ***************************************/
-	unsigned char* display_buffer = malloc(WIN_WIDTH * WIN_HEIGHT);
-	memset(display_buffer, 255, WIN_WIDTH * WIN_HEIGHT);
-	display_buffer[WIN_WIDTH / 2] = 0;
+	uint32_t* display_buffer = malloc(WIN_WIDTH * WIN_HEIGHT * 4);
+	for (int i = 0; i < WIN_WIDTH * WIN_HEIGHT; ++i) {
+		display_buffer[i] = PIXEL_SET;
+	}
+	display_buffer[WIN_WIDTH / 2] = PIXEL_CLEAR;
 
 	for (size_t i = 0; i < WIN_HEIGHT - 1; ++i) {
-		unsigned char* current = display_buffer + (WIN_WIDTH * i);
-		unsigned char* next = current + WIN_WIDTH;
+		uint32_t* current = display_buffer + (WIN_WIDTH * i);
+		uint32_t* next = current + WIN_WIDTH;
 
 		get_next_generation(next, current, WIN_WIDTH);
 	}
@@ -169,13 +174,15 @@ int main(int argc, char* argv[]) {
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
 	glTexImage2D(
-		GL_TEXTURE_2D, 0, GL_RED,
+		GL_TEXTURE_2D, 0, GL_RGBA8,
 		WIN_WIDTH, WIN_HEIGHT,
-		0, GL_RED, GL_UNSIGNED_BYTE, display_buffer
+		0, GL_RGBA, GL_UNSIGNED_INT_8_8_8_8, display_buffer
 	);
 	glGenerateMipmap(GL_TEXTURE_2D);
 
 	print_version();
+
+	int x = 1;
 
 	while(!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
@@ -187,6 +194,11 @@ int main(int argc, char* argv[]) {
 		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_BYTE, NULL);
 
 		glfwSwapBuffers(window);
+
+		if (x != 0) {
+			x = 0;
+			save_image();
+		}
 	}
 
 	free(display_buffer);
@@ -197,37 +209,31 @@ int main(int argc, char* argv[]) {
 	return 0;
 }
 
-void get_next_generation(
-	unsigned char* dst, const unsigned char* src, size_t w
-) {
-	/* needed for alignment */
-	dst[0] = 255;
-
-	/* full neighbours */
-	for (size_t i = 1; i < w; ++i) {
+void get_next_generation(uint32_t* dst, const uint32_t* src, size_t w) {
+	for (size_t i = 0; i < w; ++i) {
 		size_t left = i - 1;
 		size_t right = i + 1;
 
 		/* wrap around edges */
-		if (i == 1) {
+		if (i == 0) {
 			left = w - 1;
 		} else if (i == w - 1) {
-			right = 1;
+			right = 0;
 		}
 
 		/* convert to rule index */
 		char ri = 0;
-		if (src[left] == 0) {
+		if (src[left] == PIXEL_CLEAR) {
 			ri |= 4;
 		}
-		if (src[i] == 0) {
+		if (src[i] == PIXEL_CLEAR) {
 			ri |= 2;
 		}
-		if (src[right] == 0) {
+		if (src[right] == PIXEL_CLEAR) {
 			ri |= 1;
 		}
 
-		dst[i] = ((rule >> ri) & 1) ? 0 : 255;
+		dst[i] = ((rule >> ri) & 1) ? PIXEL_CLEAR : PIXEL_SET;
 	}
 }
 
@@ -243,4 +249,19 @@ void print_version(void) {
 		printf("revision %i", rev);
 	}
 	printf("\n");
+}
+
+void save_image() {
+	uint8_t* pixels = malloc(WIN_WIDTH * WIN_HEIGHT * 4);
+	glReadBuffer(GL_FRONT);
+	glReadPixels(
+		0, 0, WIN_WIDTH, WIN_HEIGHT,
+		GL_RGBA, GL_UNSIGNED_BYTE, pixels
+	);
+	stbi_flip_vertically_on_write(1);
+	stbi_write_png(
+		"out.png", WIN_WIDTH, WIN_HEIGHT, 4, pixels, WIN_WIDTH * 4
+	);
+
+	free(pixels);
 }
