@@ -259,8 +259,8 @@ void save_image() {
 		GL_RGBA, GL_UNSIGNED_BYTE, pixels
 	);
 	stbi_flip_vertically_on_write(1);
-	stbi_write_bmp(
-		"out.bmp", WIN_WIDTH, WIN_HEIGHT, 4, pixels
+	stbi_write_png(
+		"out.png", WIN_WIDTH, WIN_HEIGHT, 4, pixels, WIN_WIDTH * 4
 	);
 
 	free(pixels);

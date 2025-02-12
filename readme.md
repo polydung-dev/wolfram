@@ -1,8 +1,6 @@
 # Wolfram Elementary Cellular Automata
 
-Generates a 31*16 image of an elementary cellular automata.
-
-Note: The first column is always blank, due to memory alignment requirements.
+Generates a 640*480 image of an elementary cellular automata and saves a PNG.
 
 - see: https://mathworld.wolfram.com/ElementaryCellularAutomaton.html
 
@@ -51,4 +49,10 @@ are licensed under Apache 2.0, so here's a notice just in case.
 
 These files to use local `#include` paths.
 
+## STB
+
+The PNG is saved using [stb_image_write][]. Note: The file included within this
+project is a cut down version of the original which only supports PNG.
+
 [glad]: <https://gen.glad.sh/>
+[stb_image_write]: <https://github.com/nothings/stb/blob/master/stb_image_write.h>

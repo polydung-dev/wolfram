@@ -37,7 +37,7 @@ build/vendor/%.o: vendor/%.c
 lib/libglad.a: build/vendor/glad/gl.o
 	$(AR) rcs $@ $?
 
-lib/libstb.a: build/vendor/stb/stb_image_write.o
+lib/libstb.a: build/vendor/stb/stb_image_write_png.o
 	$(AR) rcs $@ $?
 
 clean:
