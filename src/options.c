@@ -36,6 +36,8 @@ const char* help_text = (
 "Generation Modes (-m):\n"
 "  standard              A standard black/white generation.\n"
 "  split                 Red, green, and blue channels are split.\n"
+"  directional           The colour of each cell depends on which parents\n"
+"                        were responsible for its activation.\n"
 );
 
 const char* modestr(enum Mode mode) {
@@ -88,8 +90,6 @@ enum ParseStatus parse_args(struct Options* options, int argc, char* argv[]) {
 	long rule_2 = -1;
 
 	options->mode = MODE_STANDARD;
-	/* the standard display draws black pixels on a white background */
-	options->invert = true;
 
 	int c = -1;
 	while ((c = getopt(argc, argv, "him:r:g:b:")) != -1) {
@@ -111,7 +111,7 @@ enum ParseStatus parse_args(struct Options* options, int argc, char* argv[]) {
 				break;
 			}
 			case 'i': {
-				options->invert = !options->invert;
+				options->invert = true;
 				break;
 			}
 			case 'h': rv = PARSE_HELP; goto abort;
@@ -125,6 +125,11 @@ enum ParseStatus parse_args(struct Options* options, int argc, char* argv[]) {
 		printf("    choice {standard, split, directional}\n");
 		rv = PARSE_BAD_ARG;
 		goto abort;
+	}
+
+	if (options->mode == MODE_STANDARD) {
+		/* the standard display draws black pixels on a white background */
+		options->invert = !options->invert;
 	}
 
 	if (rule_0 < 0 || rule_0 > 255) {
