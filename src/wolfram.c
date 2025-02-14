@@ -19,9 +19,12 @@ uint8_t PIXEL_OFF  = 0x00;
 uint8_t PIXEL_HALF = 0x45;
 uint8_t PIXEL_ON   = 0xff;
 
-void print_version(void);
-void get_next_generation(uint8_t* dst, const uint8_t* src, size_t w);
-void save_image();
+void print_version();
+void print_rule_info(struct Options* options);
+void get_next_generation(
+	uint8_t* dst, const uint8_t* src, size_t w, struct Options* options
+);
+void save_image(struct Options* options);
 
 float map(float x, float min_i, float max_i, float min_o, float max_o) {
 	float range_i = max_i - min_i;
@@ -30,33 +33,21 @@ float map(float x, float min_i, float max_i, float min_o, float max_o) {
 	return (x - min_i) * (range_o / range_i) + min_o;
 }
 
-char* byte_to_str(uint8_t n) {
-	char* s = malloc(5);
-	char* p = s;
-
-	if (n >= 100) {
-		*p++ = ('0' + n / 100);
-	}
-	if (n >= 10) {
-		*p++ = ('0' + (n / 10) % 10);
-	}
-	*p++ = ('0' + n % 10);
-
-	*p = 0;
-
-	return s;
-}
-
-struct Options options = {0};
-
 int main(int argc, char* argv[]) {
+	struct Options options = {0};
 	enum ParseStatus ps = parse_args(&options, argc, argv);
 	if (ps == PARSE_HELP) {
 		fprintf(stderr, help_text);
-		exit(0);
+		return 0;
 	}
 	if (ps != PARSE_OK) {
-		exit(2);
+		return 2;
+	}
+
+	if (options.mode == MODE_LIST_RULES) {
+		print_rule_info(&options);
+
+		return 0;
 	}
 
 	if (options.invert) {
@@ -180,7 +171,7 @@ int main(int argc, char* argv[]) {
 		uint8_t* current = display_buffer + ((WIN_WIDTH * 3) * i);
 		uint8_t* next = current + (WIN_WIDTH * 3);
 
-		get_next_generation(next, current, WIN_WIDTH);
+		get_next_generation(next, current, WIN_WIDTH, &options);
 	}
 
 	GLuint display_texture;
@@ -218,7 +209,7 @@ int main(int argc, char* argv[]) {
 
 		if (x != 0) {
 			x = 0;
-			save_image();
+			save_image(&options);
 		}
 	}
 
@@ -235,7 +226,9 @@ int main(int argc, char* argv[]) {
 	return 0;
 }
 
-void get_next_generation_standard(uint8_t* dst, const uint8_t* src, size_t w) {
+void get_next_generation_standard(
+	uint8_t* dst, const uint8_t* src, size_t w, struct Options* options
+) {
 	size_t last_pixel_index = (w - 1) * 3;
 	for (size_t i = 0; i < w; ++i) {
 		size_t pixel_index = i * 3;
@@ -261,14 +254,16 @@ void get_next_generation_standard(uint8_t* dst, const uint8_t* src, size_t w) {
 			rule_index |= 1;
 		}
 
-		bool fill_pixel = ((options.rules[0] >> rule_index) & 1) == 1;
+		bool fill_pixel = ((options->rules[0] >> rule_index) & 1) == 1;
 		if (fill_pixel) {
 			memset(dst + pixel_index, PIXEL_ON, 3);
 		}
 	}
 }
 
-void get_next_generation_split(uint8_t* dst, const uint8_t* src, size_t w) {
+void get_next_generation_split(
+	uint8_t* dst, const uint8_t* src, size_t w, struct Options* options
+) {
 	size_t last_pixel_index = (w - 1) * 3;
 	for (size_t i = 0; i < w; ++i) {
 		size_t pixel_index = i * 3;
@@ -295,14 +290,18 @@ void get_next_generation_split(uint8_t* dst, const uint8_t* src, size_t w) {
 				rule_index |= 1;
 			}
 
-			bool fill_pixel = (options.rules[channel] >> rule_index) & 1;
-			dst[pixel_index + channel] = fill_pixel ? PIXEL_ON : PIXEL_OFF;
+			bool fill_pixel = \
+				(options->rules[channel] >> rule_index) & 1;
+			dst[pixel_index + channel] = \
+				fill_pixel ? PIXEL_ON : PIXEL_OFF;
 		}
 
 	}
 }
 
-void get_next_generation_directional(uint8_t* dst, const uint8_t* src, size_t w) {
+void get_next_generation_directional(
+	uint8_t* dst, const uint8_t* src, size_t w, struct Options* options
+) {
 	size_t last_pixel_index = (w - 1) * 3;
 	for (size_t i = 0; i < w; ++i) {
 		size_t pixel_index = i * 3;
@@ -344,28 +343,30 @@ void get_next_generation_directional(uint8_t* dst, const uint8_t* src, size_t w)
 			rule_index |= 1;
 		}
 
-		bool fill_pixel = ((options.rules[0] >> rule_index) & 1) == 1;
+		bool fill_pixel = ((options->rules[0] >> rule_index) & 1) == 1;
 		if (fill_pixel) {
-			dst[pixel_index    ] = left_set  ? PIXEL_ON : PIXEL_HALF;
-			dst[pixel_index + 1] = pixel_set ? PIXEL_ON : PIXEL_HALF;
-			dst[pixel_index + 2] = right_set ? PIXEL_ON : PIXEL_HALF;
+			dst[pixel_index  ] = left_set  ? PIXEL_ON : PIXEL_HALF;
+			dst[pixel_index+1] = pixel_set ? PIXEL_ON : PIXEL_HALF;
+			dst[pixel_index+2] = right_set ? PIXEL_ON : PIXEL_HALF;
 		}
 	}
 }
 
-void get_next_generation(uint8_t* dst, const uint8_t* src, size_t w) {
-	switch (options.mode) {
+void get_next_generation(
+	uint8_t* dst, const uint8_t* src, size_t w, struct Options* options
+) {
+	switch (options->mode) {
 		default:
 		case MODE_STANDARD: {
-			get_next_generation_standard(dst, src, w);
+			get_next_generation_standard(dst, src, w, options);
 			break;
 		}
 		case MODE_SPLIT: {
-			get_next_generation_split(dst, src, w);
+			get_next_generation_split(dst, src, w, options);
 			break;
 		}
 		case MODE_DIRECTIONAL: {
-			get_next_generation_directional(dst, src, w);
+			get_next_generation_directional(dst, src, w, options);
 			break;
 		}
 	}
@@ -385,33 +386,117 @@ void print_version(void) {
 	printf("\n");
 }
 
-char* make_filename() {
+void print_rule_(uint8_t r) {
+	printf("%4i ", r);
+	for (int i = 7; i >= 0; --i) {
+		(i & 4) ? printf("x") : printf("o");
+		(i & 2) ? printf("x") : printf("o");
+		(i & 1) ? printf("x") : printf("o");
+		printf(" ");
+	}
+	printf("\n");
+
+	printf("     ");
+	for (int i = 7; i >= 0; --i) {
+		printf(" ");
+		((r >> i) & 1) ? printf("x") : printf("o");
+		printf(" ");
+		printf(" ");
+	}
+	printf("\n");
+}
+
+uint8_t get_mirror_rule(uint8_t r) {
+	uint8_t nr = r & 0xa5; /* 0b10100101 already mirrored */
+
+	/* swap 3 and 6 */
+	nr |= ((r >> 3) & 1) << 6;
+	nr |= ((r >> 6) & 1) << 3;
+
+	/* swap 4 and 1 */
+	nr |= ((r >> 4) & 1) << 1;
+	nr |= ((r >> 1) & 1) << 4;
+
+	return nr;
+}
+
+uint8_t get_complement_rule(uint8_t r) {
+	// return ~r;
+	uint8_t nr = 0;
+
+	for (int i = 0; i < 8; ++i) {
+		nr |= ((r >> i) & 1) << (7 - i);
+	}
+
+	return ~nr;
+}
+
+void print_rule_info(struct Options* options) {
+	uint8_t r = options->rules[0];
+	uint8_t m = get_mirror_rule(r);
+
+	printf("Rule\n");
+	print_rule_(r);
+	printf("\n");
+
+	printf("Mirror\n");
+	print_rule_(m);
+	printf("\n");
+
+	printf("Complement\n");
+	print_rule_(get_complement_rule(r));
+	printf("\n");
+
+	printf("Mirror Complement\n");
+	print_rule_(get_complement_rule(m));
+	printf("\n");
+}
+
+char* byte_to_str(uint8_t n) {
+	char* s = malloc(4);
+
+	s[0] = '0' +  n / 100;
+	s[1] = '0' + (n /  10) % 10;
+	s[2] = '0' +  n        % 10;
+	s[3] = 0;
+
+	return s;
+}
+
+char* make_filename(struct Options* options) {
 	char* name_buffer = malloc(128);
 	char* p = name_buffer;
 
-	const char* mode_string = modestr(options.mode);
+	const char* mode_string = modestr(options->mode);
 	size_t mode_string_sz = strlen(mode_string);
 
 	int rule_count = 1;
-	if (options.mode == MODE_SPLIT) { rule_count = 3; }
+	if (options->mode == MODE_SPLIT) { rule_count = 3; }
 
 	memcpy(p, "rule-", 5);
 	p += 5;
 
 	for (int i = 0; i < rule_count; ++i) {
-		char* n = byte_to_str(options.rules[i]);
-		size_t s = strlen(n);
-		memcpy(p, n, s);
-		p += s;
-		*p++ = '-';
-		free(n);
+		uint8_t n = options->rules[i];
+		char* str = malloc(4);
+
+		str[0] = '0' +  n / 100;
+		str[1] = '0' + (n /  10) % 10;
+		str[2] = '0' +  n        % 10;
+
+		memcpy(p, str, 3);
+		p += 3;
+		*p = '-';
+		++p;
+
+		free(str);
 	}
 
 	memcpy(p, mode_string, mode_string_sz);
 	p += mode_string_sz;
 
 	/* standard mode is inverted by default, uninverted by flag */
-	if (options.invert ^ (options.mode == MODE_STANDARD)) {
+	if (options->invert ^ (options->mode == MODE_STANDARD)) {
 		memcpy(p, "-i", 2);
 		p += 2;
 	}
@@ -420,9 +505,9 @@ char* make_filename() {
 	return name_buffer;
 }
 
-void save_image() {
+void save_image(struct Options* options) {
 	uint8_t* pixels = malloc(WIN_WIDTH * WIN_HEIGHT * 3);
-	char* filename = make_filename();
+	char* filename = make_filename(options);
 
 	glReadBuffer(GL_FRONT);
 	glReadPixels(

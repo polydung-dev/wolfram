@@ -19,7 +19,8 @@ enum Mode {
 	MODE_STANDARD    = 1,
 	MODE_SPLIT       = 2,
 	MODE_DIRECTIONAL = 3,
-	MODE_LAST        = 4
+	MODE_LIST_RULES  = 4,
+	MODE_LAST        = 5
 };
 
 struct Options {

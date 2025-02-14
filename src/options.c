@@ -14,6 +14,7 @@ static const char* modestrings[] = {
 };
 
 const char* help_text = (
+"Usage: wolfram -v -r RULE\n"
 "Usage: wolfram [-i] [-m standard]   -r RULE\n"
 "Usage: wolfram [-i]  -m directional -r RULE\n"
 "Usage: wolfram [-i]  -m split       -r RULE -g RULE -b RULE\n"
@@ -30,6 +31,7 @@ const char* help_text = (
 "  -g RULE, -b RULE      Specify additional rules for the green and blue\n"
 "                        channels. Ignored if the MODE (-m) is not 'split'.\n"
 "\n"
+"  -v                    Display rule variants (mirror, inverse) and exit.\n"
 "  -h                    Display this text and exit.\n"
 "\n"
 "\n"
@@ -83,31 +85,43 @@ long parse_num(const char* src) {
 }
 
 enum ParseStatus parse_args(struct Options* options, int argc, char* argv[]) {
+	/* todo: mutually exclusive options? no -m and -v? */
 	enum ParseStatus rv = PARSE_OK;
 
-	long rule_0 = -1;
-	long rule_1 = -1;
-	long rule_2 = -1;
+	bool r_set = false;
+	bool g_set = false;
+	bool b_set = false;
+
+	long r_value = 0;
+	long g_value = 0;
+	long b_value = 0;
 
 	options->mode = MODE_STANDARD;
 
 	int c = -1;
-	while ((c = getopt(argc, argv, "him:r:g:b:")) != -1) {
+	while ((c = getopt(argc, argv, "hvim:r:g:b:")) != -1) {
 		switch (c) {
 			case 'm': {
 				options->mode = parse_mode(optarg);
 				break;
 			}
+			case 'v': {
+				options->mode = MODE_LIST_RULES;
+				break;
+			}
 			case 'r': {
-				rule_0 = parse_num(optarg);
+				r_set = true;
+				r_value = parse_num(optarg);
 				break;
 			}
 			case 'g': {
-				rule_1 = parse_num(optarg);
+				g_set = true;
+				g_value = parse_num(optarg);
 				break;
 			}
 			case 'b': {
-				rule_2 = parse_num(optarg);
+				b_set = true;
+				b_value = parse_num(optarg);
 				break;
 			}
 			case 'i': {
@@ -128,48 +142,46 @@ enum ParseStatus parse_args(struct Options* options, int argc, char* argv[]) {
 	}
 
 	if (options->mode == MODE_STANDARD) {
-		/* the standard display draws black pixels on a white background */
+		/* standard display draws black pixels on a white background */
 		options->invert = !options->invert;
 	}
 
-	if (rule_0 < 0 || rule_0 > 255) {
-		printf("%s: invalid argument for option -- 'r'\n", argv[0]);
-		printf("    range (0, 255)\n");
+	if (!r_set) {
+		printf("%s: missing option -- 'r'\n", argv[0]);
+		rv = PARSE_NO_ARG;
+		goto abort;
+	}
+	if (r_value < 0 || r_value > 255) {
+		printf("%s: rule out of range -- 'r'\n", argv[0]);
 		rv = PARSE_BAD_ARG;
 		goto abort;
 	}
-
-	options->rules[0] = rule_0;
+	options->rules[0] = r_value;
 
 	if (options->mode == MODE_SPLIT) {
-		if (rule_1 == -1) {
-			printf("%s: missing argument for option -- 'g'\n", argv[0]);
+		if (!g_set) {
+			printf("%s: missing option -- 'g'\n", argv[0]);
 			rv = PARSE_NO_ARG;
 			goto abort;
 		}
-
-		if (rule_1 < 0 || rule_1 > 255) {
-			printf("%s: invalid argument for option -- 'g'\n", argv[0]);
-			printf("    range (0, 255)\n");
+		if (g_value < 0 || g_value > 255) {
+			printf("%s: rule out of range -- 'g'\n", argv[0]);
 			rv = PARSE_BAD_ARG;
 			goto abort;
 		}
+		options->rules[1] = g_value;
 
-		if (rule_2 == -1) {
-			printf("%s: missing argument for option -- 'b'\n", argv[0]);
+		if (!b_set) {
+			printf("%s: missing option -- 'b'\n", argv[0]);
 			rv = PARSE_NO_ARG;
 			goto abort;
 		}
-
-		if (rule_2 < 0 || rule_2 > 255) {
-			printf("%s: invalid argument for option -- 'b'\n", argv[0]);
-			printf("    range (0, 255)\n");
+		if (b_value < 0 || b_value > 255) {
+			printf("%s: rule out of range -- 'b'\n", argv[0]);
 			rv = PARSE_BAD_ARG;
 			goto abort;
 		}
-
-		options->rules[1] = rule_1;
-		options->rules[2] = rule_2;
+		options->rules[2] = b_value;
 	}
 
 abort:
