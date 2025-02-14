@@ -30,6 +30,23 @@ float map(float x, float min_i, float max_i, float min_o, float max_o) {
 	return (x - min_i) * (range_o / range_i) + min_o;
 }
 
+char* byte_to_str(uint8_t n) {
+	char* s = malloc(5);
+	char* p = s;
+
+	if (n >= 100) {
+		*p++ = ('0' + n / 100);
+	}
+	if (n >= 10) {
+		*p++ = ('0' + (n / 10) % 10);
+	}
+	*p++ = ('0' + n % 10);
+
+	*p = 0;
+
+	return s;
+}
+
 struct Options options = {0};
 
 int main(int argc, char* argv[]) {
@@ -368,8 +385,45 @@ void print_version(void) {
 	printf("\n");
 }
 
+char* make_filename() {
+	char* name_buffer = malloc(128);
+	char* p = name_buffer;
+
+	const char* mode_string = modestr(options.mode);
+	size_t mode_string_sz = strlen(mode_string);
+
+	int rule_count = 1;
+	if (options.mode == MODE_SPLIT) { rule_count = 3; }
+
+	memcpy(p, "rule-", 5);
+	p += 5;
+
+	for (int i = 0; i < rule_count; ++i) {
+		char* n = byte_to_str(options.rules[i]);
+		size_t s = strlen(n);
+		memcpy(p, n, s);
+		p += s;
+		*p++ = '-';
+		free(n);
+	}
+
+	memcpy(p, mode_string, mode_string_sz);
+	p += mode_string_sz;
+
+	/* standard mode is inverted by default, uninverted by flag */
+	if (options.invert ^ (options.mode == MODE_STANDARD)) {
+		memcpy(p, "-i", 2);
+		p += 2;
+	}
+
+	memcpy(p, ".png", 5);
+	return name_buffer;
+}
+
 void save_image() {
 	uint8_t* pixels = malloc(WIN_WIDTH * WIN_HEIGHT * 3);
+	char* filename = make_filename();
+
 	glReadBuffer(GL_FRONT);
 	glReadPixels(
 		0, 0, WIN_WIDTH, WIN_HEIGHT,
@@ -377,8 +431,9 @@ void save_image() {
 	);
 	stbi_flip_vertically_on_write(1);
 	stbi_write_png(
-		"out.png", WIN_WIDTH, WIN_HEIGHT, 3, pixels, WIN_WIDTH * 3
+		filename, WIN_WIDTH, WIN_HEIGHT, 3, pixels, WIN_WIDTH * 3
 	);
 
+	free(filename);
 	free(pixels);
 }

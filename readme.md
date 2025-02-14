@@ -29,7 +29,7 @@ The standard mode (with the `-m` flag omitted) displays as usual.
 $ ./out/wolfram -r 73
 ```
 
-![](/assets/standard-73.png)
+![](/assets/rule-73-standard.png)
 
 ### Directional
 
@@ -45,7 +45,7 @@ coloured in a dark grey.
 $ ./out/wolfram -m directional -r 73
 ```
 
-![](/assets/directional-73.png)
+![](/assets/rule-73-directional.png)
 
 ### Split
 
@@ -58,7 +58,7 @@ in both rules 1 and 73.
 ```
 $ ./out/wolfram -m split -r 1 -g 73 -b 1
 ```
-![](/assets/split-1-73-1.png)
+![](/assets/rule-1-73-1-split.png)
 
 ## GLAD
 
