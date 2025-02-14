@@ -6,7 +6,7 @@ Generates a 640*480 image of an elementary cellular automata and saves a PNG.
 
 ## Requirements
 
-- Linux (`<getopt.h>`)
+- Linux (for `<getopt.h>`)
 - [GLFW](https://www.glfw.org/)
 
 ## Quick Start
@@ -29,7 +29,7 @@ The standard mode (with the `-m` flag omitted) displays as usual.
 $ ./out/wolfram -r 73
 ```
 
-![](/assets/rule-73-standard.png)
+![](/assets/rule-073-standard.png)
 
 ### Directional
 
@@ -45,7 +45,7 @@ coloured in a dark grey.
 $ ./out/wolfram -m directional -r 73
 ```
 
-![](/assets/rule-73-directional.png)
+![](/assets/rule-073-directional.png)
 
 ### Split
 
@@ -58,7 +58,7 @@ in both rules 1 and 73.
 ```
 $ ./out/wolfram -m split -r 1 -g 73 -b 1
 ```
-![](/assets/rule-1-73-1-split.png)
+![](/assets/rule-001-073-001-split.png)
 
 ## GLAD
 
@@ -92,12 +92,18 @@ are licensed under Apache 2.0, so here's a notice just in case.
 
 ### Modifications
 
-These files to use local `#include` paths.
+These files have been modified to use local `#include` paths.
 
 ## STB
 
-The PNG is saved using [stb_image_write][]. Note: The file included within this
-project is a cut down version of the original which only supports PNG.
+The PNG is saved using [stb_image_write][].
+
+### Modifications
+
+- The file included within this project is a cut down version of the original
+  which only supports PNG.
+- The original file was a single header-only library; It has been split in
+  two to reduce re-compilation.
 
 [glad]: <https://gen.glad.sh/>
 [stb_image_write]: <https://github.com/nothings/stb/blob/master/stb_image_write.h>
