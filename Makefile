@@ -2,11 +2,11 @@ CFLAGS+=-g3 -O3 -MMD -std=c99 -pedantic
 LDFLAGS+=-lglfw -lm
 
 ## warnings
-CFLAGS+=-Wall -Wextra
+# CFLAGS+=-Wall -Wextra
 
 ## sanitizers
-CFLAGS+=-fsanitize=address,undefined,leak
-LDFLAGS+=-fsanitize=address,undefined,leak
+# CFLAGS+=-fsanitize=address,undefined,leak
+# LDFLAGS+=-fsanitize=address,undefined,leak
 
 ## vendor
 CFLAGS+=-I./vendor
