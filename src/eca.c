@@ -1,6 +1,7 @@
 #include "eca.h"
 
 #include <stdbool.h>
+#include <stdlib.h>
 #include <string.h>
 
 uint8_t pixel_off  = 0x00;
@@ -31,8 +32,40 @@ uint8_t get_complement_rule(uint8_t r) {
 	return ~nr;
 }
 
+/* populates an initial generation */
+void eca_initialise(uint8_t* dst, size_t width, size_t channel_count) {
+	size_t row_size = width * channel_count;
+	memset(dst, pixel_off, row_size);
+
+	size_t centre_pixel = (width / 2) * channel_count;
+	memset(dst + centre_pixel, pixel_on, channel_count);
+}
+
+
+void eca_initialise_alternate(uint8_t* dst, size_t width, size_t channel_count) {
+	size_t row_size = width * channel_count;
+	memset(dst, pixel_off, row_size);
+
+	for (size_t i = 0; i < width; ++i) {
+		uint8_t val = (i % 2) ? pixel_on : pixel_off;
+		memset(dst + (i * channel_count), val, channel_count);
+	}
+}
+
+void eca_initialise_random(uint8_t* dst, size_t width, size_t channel_count) {
+	size_t row_size = width * channel_count;
+	memset(dst, pixel_off, row_size);
+
+	srand(0);
+	for (size_t i = 0; i < width; ++i) {
+		uint8_t val = (rand() % 2) ? pixel_on : pixel_off;
+		memset(dst + (i * channel_count), val, channel_count);
+	}
+}
+
+/* generates the next generation */
 void eca_generate(
-	uint8_t* dst, const uint8_t* src, size_t width, uint8_t rule
+	uint8_t* dst, const uint8_t* src, size_t width, uint8_t rules[3]
 ) {
 	size_t last_pixel_index = (width - 1) * 3;
 	for (size_t i = 0; i < width; ++i) {
@@ -59,7 +92,7 @@ void eca_generate(
 			rule_index |= 1;
 		}
 
-		bool fill_pixel = ((rule >> rule_index) & 1) == 1;
+		bool fill_pixel = ((rules[0] >> rule_index) & 1) == 1;
 		if (fill_pixel) {
 			memset(dst + pixel_index, pixel_on, 3);
 		}
@@ -105,7 +138,7 @@ void eca_generate_split(
 }
 
 void eca_generate_directional(
-	uint8_t* dst, const uint8_t* src, size_t width, uint8_t rule
+	uint8_t* dst, const uint8_t* src, size_t width, uint8_t rules[3]
 ) {
 	size_t last_pixel_index = (width - 1) * 3;
 	for (size_t i = 0; i < width; ++i) {
@@ -148,7 +181,7 @@ void eca_generate_directional(
 			rule_index |= 1;
 		}
 
-		bool fill_pixel = ((rule >> rule_index) & 1) == 1;
+		bool fill_pixel = ((rules[0] >> rule_index) & 1) == 1;
 		if (fill_pixel) {
 			dst[pixel_index  ] = left_set  ? pixel_on : pixel_half;
 			dst[pixel_index+1] = pixel_set ? pixel_on : pixel_half;

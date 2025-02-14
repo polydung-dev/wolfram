@@ -48,7 +48,8 @@ int main(int argc, char* argv[]) {
 		return RV_OK;
 	}
 
-	if (options.invert) {
+	/* standard display draws black pixels on a white background */
+	if (options.mode == MODE_STANDARD) {
 		pixel_off  = 0xff - pixel_off;
 		pixel_half = 0xff - pixel_half;
 		pixel_on   = 0xff - pixel_on;
@@ -170,39 +171,35 @@ int main(int argc, char* argv[]) {
 	size_t row_size = window_width * channel_count;
 	size_t buffer_size = row_size * window_height;
 	uint8_t* display_buffer = malloc(buffer_size);
-	memset(display_buffer, pixel_off,  buffer_size);
-	memset(display_buffer + (row_size / 2), pixel_on, channel_count);
+	memset(display_buffer, pixel_off, buffer_size);
+
+	/* set initial generation */
+	eca_init_fn* init_fn = NULL;
+	switch (options.initial) {
+		default:
+		case INIT_STANDARD:  init_fn = eca_initialise;           break;
+		case INIT_ALTERNATE: init_fn = eca_initialise_alternate; break;
+		case INIT_RANDOM:    init_fn = eca_initialise_random;    break;
+	}
+
+	init_fn(display_buffer, window_width, channel_count);
+
+	/* generation all */
+	eca_gen_fn* gen_fn = NULL;
+	switch (options.mode) {
+		default:
+		case MODE_STANDARD:    gen_fn = eca_generate;             break;
+		case MODE_SPLIT:       gen_fn = eca_generate_split;       break;
+		case MODE_DIRECTIONAL: gen_fn = eca_generate_directional; break;
+	}
 
 	for (size_t i = 0; i < window_height - 1; ++i) {
 		uint8_t* current = display_buffer + ((row_size) * i);
 		uint8_t* next = current + (row_size);
-
-		switch (options.mode) {
-			default:
-			case MODE_STANDARD: {
-				eca_generate(
-					next, current, window_width,
-					options.rules[0]
-				);
-				break;
-			}
-			case MODE_SPLIT: {
-				eca_generate_split(
-					next, current, window_width,
-					options.rules
-				);
-				break;
-			}
-			case MODE_DIRECTIONAL: {
-				eca_generate_directional(
-					next, current, window_width,
-					options.rules[0]
-				);
-				break;
-			}
-		}
+		gen_fn(next, current, window_width, options.rules);
 	}
 
+	/* display texture ***************************************************/
 	GLuint display_texture;
 	glGenTextures(1, &display_texture);
 	glBindTexture(GL_TEXTURE_2D, display_texture);
@@ -310,15 +307,11 @@ char* make_filename(struct Options* options) {
 	char* name_buffer = malloc(128);
 	char* p = name_buffer;
 
-	const char* mode_string = modestr(options->mode);
-	size_t mode_string_sz = strlen(mode_string);
+	memcpy(p, "rule", 4);
+	p += 4;
 
 	int rule_count = 1;
 	if (options->mode == MODE_SPLIT) { rule_count = channel_count; }
-
-	memcpy(p, "rule-", 5);
-	p += 5;
-
 	for (int i = 0; i < rule_count; ++i) {
 		uint8_t n = options->rules[i];
 		char* str = malloc(4);
@@ -327,21 +320,29 @@ char* make_filename(struct Options* options) {
 		str[1] = '0' + (n /  10) % 10;
 		str[2] = '0' +  n        % 10;
 
+		*p++ = '-';
 		memcpy(p, str, 3);
 		p += 3;
-		*p = '-';
-		++p;
 
 		free(str);
 	}
 
-	memcpy(p, mode_string, mode_string_sz);
-	p += mode_string_sz;
+	if (options->mode != MODE_STANDARD) {
+		const char* mode_string = modestr(options->mode);
+		size_t mode_string_sz = strlen(mode_string);
 
-	/* standard mode is inverted by default, uninverted by flag */
-	if (options->invert ^ (options->mode == MODE_STANDARD)) {
-		memcpy(p, "-i", 2);
-		p += 2;
+		*p++ = '-';
+		memcpy(p, mode_string, mode_string_sz);
+		p += mode_string_sz;
+	}
+
+	if (options->initial != INIT_STANDARD) {
+		const char* init_string = initstr(options->initial);
+		size_t init_string_sz = strlen(init_string);
+
+		*p++ = '-';
+		memcpy(p, init_string, init_string_sz);
+		p += init_string_sz;
 	}
 
 	memcpy(p, ".png", 5);
