@@ -207,7 +207,12 @@ int main(int argc, char* argv[]) {
 
 	free(display_buffer);
 
+	glDeleteTextures(1, &display_texture);
 	glDeleteProgram(shader_program);
+	glDeleteBuffers(1, &ebo);
+	glDeleteBuffers(1, &vbo);
+	glDeleteVertexArrays(1, &vao);
+	glfwDestroyWindow(window);
 	glfwTerminate();
 
 	return 0;
@@ -364,15 +369,15 @@ void print_version(void) {
 }
 
 void save_image() {
-	uint8_t* pixels = malloc(WIN_WIDTH * WIN_HEIGHT * 4);
+	uint8_t* pixels = malloc(WIN_WIDTH * WIN_HEIGHT * 3);
 	glReadBuffer(GL_FRONT);
 	glReadPixels(
 		0, 0, WIN_WIDTH, WIN_HEIGHT,
-		GL_RGBA, GL_UNSIGNED_BYTE, pixels
+		GL_RGB, GL_UNSIGNED_BYTE, pixels
 	);
 	stbi_flip_vertically_on_write(1);
 	stbi_write_png(
-		"out.png", WIN_WIDTH, WIN_HEIGHT, 4, pixels, WIN_WIDTH * 4
+		"out.png", WIN_WIDTH, WIN_HEIGHT, 3, pixels, WIN_WIDTH * 3
 	);
 
 	free(pixels);
