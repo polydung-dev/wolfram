@@ -10,34 +10,48 @@ static const char* modestrings[] = {
 	"unknown",
 	"standard",
 	"split",
-	"directional"
+	"directional",
+	"list_rules"
+};
+
+static const char* initstrings[] = {
+	"unknown",
+	"standard",
+	"alternate",
+	"random"
 };
 
 const char* help_text = (
-"Usage: wolfram [-i] [-m standard]   -r RULE\n"
-"Usage: wolfram [-i]  -m directional -r RULE\n"
-"Usage: wolfram [-i]  -m split       -r RULE -g RULE -b RULE\n"
+"Usage: wolfram -h\n"
+"Usage: wolfram -v -r RULE\n"
+"Usage: wolfram [-i INITIAL] [-m standard]   -r RULE\n"
+"Usage: wolfram [-i INITIAL]  -m directional -r RULE\n"
+"Usage: wolfram [-i INITIAL]  -m split       -r RULE -g RULE -b RULE\n"
 "\n"
 "Generates an elementary cellular automata.\n"
 "\n"
 "  -r RULE               Wolfram Rule (0-255)\n"
-"  -m MODE               Generation mode {standard, split, directional}\n"
-"                        Default: standard\n"
-"                        If 'split' is chosen for the mode, both of '-g' and\n"
-"                        '-b' must also be specified.\n"
-"  -i                    Invert 'on' and 'off' values.\n"
-"\n"
 "  -g RULE, -b RULE      Specify additional rules for the green and blue\n"
-"                        channels. Ignored if the MODE (-m) is not 'split'.\n"
-"\n"
+"                          channels. Ignored if MODE (-m) is not 'split'.\n"
+"  -i INITIAL            Initial population {standard, alternate, random}\n"
+"                          Default: standard\n"
+"  -m MODE               Generation mode {standard, split, directional}\n"
+"                          Default: standard\n"
+"                          If 'split' is chosen for the mode, both of '-g'\n"
+"                          and '-b' must also be specified.\n"
+"  -v                    Display rule variants (mirror, inverse) and exit.\n"
 "  -h                    Display this text and exit.\n"
 "\n"
+"Initial Population (-i):\n"
+"  standard              Only the centre cell is activated.\n"
+"  alternate             Every other cell is activated.\n"
+"  random                Cell activation is random.\n"
 "\n"
 "Generation Modes (-m):\n"
 "  standard              A standard black/white generation.\n"
 "  split                 Red, green, and blue channels are split.\n"
 "  directional           The colour of each cell depends on which parents\n"
-"                        were responsible for its activation.\n"
+"                          were responsible for its activation.\n"
 );
 
 const char* modestr(enum Mode mode) {
@@ -46,6 +60,14 @@ const char* modestr(enum Mode mode) {
 	}
 
 	return modestrings[mode];
+}
+
+const char* initstr(enum Initial init) {
+	if (init >= INIT_LAST) {
+		init = INIT_UNKNOWN;
+	}
+
+	return initstrings[init];
 }
 
 bool compare(const char* a, const char* b) {
@@ -60,11 +82,23 @@ bool compare(const char* a, const char* b) {
 }
 
 enum Mode parse_mode(const char* src) {
-	if (compare(src, "standard"))    { return MODE_STANDARD; }
-	if (compare(src, "split"))       { return MODE_SPLIT; }
-	if (compare(src, "directional")) { return MODE_DIRECTIONAL; }
+	for (enum Mode mode = MODE_UNKNOWN; mode < MODE_LAST; ++mode) {
+		if (compare(src, modestrings[mode])) {
+			return mode;
+		}
+	}
 
 	return MODE_UNKNOWN;
+}
+
+enum Initial parse_initial(const char* src) {
+	for (enum Initial init = INIT_UNKNOWN; init < INIT_LAST; ++init) {
+		if (compare(src, initstrings[init])) {
+			return init;
+		}
+	}
+
+	return INIT_UNKNOWN;
 }
 
 long parse_num(const char* src) {
@@ -83,35 +117,48 @@ long parse_num(const char* src) {
 }
 
 enum ParseStatus parse_args(struct Options* options, int argc, char* argv[]) {
+	/* todo: mutually exclusive options? no -m and -v? */
 	enum ParseStatus rv = PARSE_OK;
 
-	long rule_0 = -1;
-	long rule_1 = -1;
-	long rule_2 = -1;
+	bool r_set = false;
+	bool g_set = false;
+	bool b_set = false;
+
+	long r_value = 0;
+	long g_value = 0;
+	long b_value = 0;
 
 	options->mode = MODE_STANDARD;
+	options->initial = INIT_STANDARD;
 
 	int c = -1;
-	while ((c = getopt(argc, argv, "him:r:g:b:")) != -1) {
+	while ((c = getopt(argc, argv, "hvi:m:r:g:b:")) != -1) {
 		switch (c) {
 			case 'm': {
 				options->mode = parse_mode(optarg);
 				break;
 			}
+			case 'v': {
+				options->mode = MODE_LIST_RULES;
+				break;
+			}
 			case 'r': {
-				rule_0 = parse_num(optarg);
+				r_set = true;
+				r_value = parse_num(optarg);
 				break;
 			}
 			case 'g': {
-				rule_1 = parse_num(optarg);
+				g_set = true;
+				g_value = parse_num(optarg);
 				break;
 			}
 			case 'b': {
-				rule_2 = parse_num(optarg);
+				b_set = true;
+				b_value = parse_num(optarg);
 				break;
 			}
 			case 'i': {
-				options->invert = true;
+				options->initial = parse_initial(optarg);
 				break;
 			}
 			case 'h': rv = PARSE_HELP; goto abort;
@@ -127,49 +174,49 @@ enum ParseStatus parse_args(struct Options* options, int argc, char* argv[]) {
 		goto abort;
 	}
 
-	if (options->mode == MODE_STANDARD) {
-		/* the standard display draws black pixels on a white background */
-		options->invert = !options->invert;
-	}
-
-	if (rule_0 < 0 || rule_0 > 255) {
-		printf("%s: invalid argument for option -- 'r'\n", argv[0]);
-		printf("    range (0, 255)\n");
+	if (options->initial == INIT_UNKNOWN) {
+		printf("%s: invalid argument for option -- 'i'\n", argv[0]);
+		printf("    choice {standard, alternate, random}\n");
 		rv = PARSE_BAD_ARG;
 		goto abort;
 	}
 
-	options->rules[0] = rule_0;
+	if (!r_set) {
+		printf("%s: missing option -- 'r'\n", argv[0]);
+		rv = PARSE_NO_ARG;
+		goto abort;
+	}
+	if (r_value < 0 || r_value > 255) {
+		printf("%s: rule out of range -- 'r'\n", argv[0]);
+		rv = PARSE_BAD_ARG;
+		goto abort;
+	}
+	options->rules[0] = r_value;
 
 	if (options->mode == MODE_SPLIT) {
-		if (rule_1 == -1) {
-			printf("%s: missing argument for option -- 'g'\n", argv[0]);
+		if (!g_set) {
+			printf("%s: missing option -- 'g'\n", argv[0]);
 			rv = PARSE_NO_ARG;
 			goto abort;
 		}
-
-		if (rule_1 < 0 || rule_1 > 255) {
-			printf("%s: invalid argument for option -- 'g'\n", argv[0]);
-			printf("    range (0, 255)\n");
+		if (g_value < 0 || g_value > 255) {
+			printf("%s: rule out of range -- 'g'\n", argv[0]);
 			rv = PARSE_BAD_ARG;
 			goto abort;
 		}
+		options->rules[1] = g_value;
 
-		if (rule_2 == -1) {
-			printf("%s: missing argument for option -- 'b'\n", argv[0]);
+		if (!b_set) {
+			printf("%s: missing option -- 'b'\n", argv[0]);
 			rv = PARSE_NO_ARG;
 			goto abort;
 		}
-
-		if (rule_2 < 0 || rule_2 > 255) {
-			printf("%s: invalid argument for option -- 'b'\n", argv[0]);
-			printf("    range (0, 255)\n");
+		if (b_value < 0 || b_value > 255) {
+			printf("%s: rule out of range -- 'b'\n", argv[0]);
 			rv = PARSE_BAD_ARG;
 			goto abort;
 		}
-
-		options->rules[1] = rule_1;
-		options->rules[2] = rule_2;
+		options->rules[2] = b_value;
 	}
 
 abort:
