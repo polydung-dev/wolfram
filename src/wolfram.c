@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -8,17 +9,18 @@
 
 #include "stb/stb_image_write.h"
 
+#include "options.h"
+
 #define WIN_WIDTH 640
 #define WIN_HEIGHT 480
 #define TITLE "wolfram"
 
-#define PIXEL_SET   0xffffffff
-#define PIXEL_CLEAR 0x000000ff
-
-uint8_t rule = 0;
+uint8_t PIXEL_OFF  = 0x00;
+uint8_t PIXEL_HALF = 0x45;
+uint8_t PIXEL_ON   = 0xff;
 
 void print_version(void);
-void get_next_generation(uint32_t* dst, const uint32_t* src, size_t w);
+void get_next_generation(uint8_t* dst, const uint8_t* src, size_t w);
 void save_image();
 
 float map(float x, float min_i, float max_i, float min_o, float max_o) {
@@ -28,19 +30,23 @@ float map(float x, float min_i, float max_i, float min_o, float max_o) {
 	return (x - min_i) * (range_o / range_i) + min_o;
 }
 
+struct Options options = {0};
+
 int main(int argc, char* argv[]) {
-	if (argc != 2) {
-		printf("usage: %s <rule>\n", argv[0]);
-		exit(1);
+	enum ParseStatus ps = parse_args(&options, argc, argv);
+	if (ps == PARSE_HELP) {
+		fprintf(stderr, help_text);
+		exit(0);
+	}
+	if (ps != PARSE_OK) {
+		exit(2);
 	}
 
-	long r = strtol(argv[1], NULL, 10);
-	if (r < 0 || r > 255) {
-		printf("Please enter a rule number between 0 and 255\n");
-		exit(1);
+	if (options.invert) {
+		PIXEL_OFF  = 0xff - PIXEL_OFF;
+		PIXEL_HALF = 0xff - PIXEL_HALF;
+		PIXEL_ON   = 0xff - PIXEL_ON;
 	}
-
-	rule = (uint8_t)r;
 
 	glfwInit();
 	/* 4.3 required for debug context */
@@ -149,15 +155,13 @@ int main(int argc, char* argv[]) {
 	glUniformMatrix4fv(loc, 1, GL_FALSE, (GLfloat*)(mvp_matrix));
 
 	/* display buffer/texture init ***************************************/
-	uint32_t* display_buffer = malloc(WIN_WIDTH * WIN_HEIGHT * 4);
-	for (int i = 0; i < WIN_WIDTH * WIN_HEIGHT; ++i) {
-		display_buffer[i] = PIXEL_SET;
-	}
-	display_buffer[WIN_WIDTH / 2] = PIXEL_CLEAR;
+	uint8_t* display_buffer = malloc(WIN_WIDTH * WIN_HEIGHT * 3);
+	memset(display_buffer, PIXEL_OFF,  WIN_WIDTH * WIN_HEIGHT * 3);
+	memset(display_buffer + (WIN_WIDTH * 3 / 2), PIXEL_ON, 3);
 
 	for (size_t i = 0; i < WIN_HEIGHT - 1; ++i) {
-		uint32_t* current = display_buffer + (WIN_WIDTH * i);
-		uint32_t* next = current + WIN_WIDTH;
+		uint8_t* current = display_buffer + ((WIN_WIDTH * 3) * i);
+		uint8_t* next = current + (WIN_WIDTH * 3);
 
 		get_next_generation(next, current, WIN_WIDTH);
 	}
@@ -174,9 +178,9 @@ int main(int argc, char* argv[]) {
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
 	glTexImage2D(
-		GL_TEXTURE_2D, 0, GL_RGBA8,
+		GL_TEXTURE_2D, 0, GL_RGB,
 		WIN_WIDTH, WIN_HEIGHT,
-		0, GL_RGBA, GL_UNSIGNED_INT_8_8_8_8, display_buffer
+		0, GL_RGB, GL_UNSIGNED_BYTE, display_buffer
 	);
 	glGenerateMipmap(GL_TEXTURE_2D);
 
@@ -209,31 +213,139 @@ int main(int argc, char* argv[]) {
 	return 0;
 }
 
-void get_next_generation(uint32_t* dst, const uint32_t* src, size_t w) {
+void get_next_generation_standard(uint8_t* dst, const uint8_t* src, size_t w) {
+	size_t last_pixel_index = (w - 1) * 3;
 	for (size_t i = 0; i < w; ++i) {
-		size_t left = i - 1;
-		size_t right = i + 1;
+		size_t pixel_index = i * 3;
+		size_t left_pixel  = pixel_index - 3;
+		size_t right_pixel = pixel_index + 3;
 
 		/* wrap around edges */
-		if (i == 0) {
-			left = w - 1;
-		} else if (i == w - 1) {
-			right = 0;
+		if (pixel_index == 0) {
+			left_pixel = last_pixel_index;
+		} else if (pixel_index == last_pixel_index) {
+			right_pixel = 0;
 		}
 
 		/* convert to rule index */
-		char ri = 0;
-		if (src[left] == PIXEL_CLEAR) {
-			ri |= 4;
+		char rule_index = 0;
+		if (src[left_pixel] == PIXEL_ON) {
+			rule_index |= 4;
 		}
-		if (src[i] == PIXEL_CLEAR) {
-			ri |= 2;
+		if (src[pixel_index] == PIXEL_ON) {
+			rule_index |= 2;
 		}
-		if (src[right] == PIXEL_CLEAR) {
-			ri |= 1;
+		if (src[right_pixel] == PIXEL_ON) {
+			rule_index |= 1;
 		}
 
-		dst[i] = ((rule >> ri) & 1) ? PIXEL_CLEAR : PIXEL_SET;
+		bool fill_pixel = ((options.rules[0] >> rule_index) & 1) == 1;
+		if (fill_pixel) {
+			memset(dst + pixel_index, PIXEL_ON, 3);
+		}
+	}
+}
+
+void get_next_generation_split(uint8_t* dst, const uint8_t* src, size_t w) {
+	size_t last_pixel_index = (w - 1) * 3;
+	for (size_t i = 0; i < w; ++i) {
+		size_t pixel_index = i * 3;
+		size_t left_pixel  = pixel_index - 3;
+		size_t right_pixel = pixel_index + 3;
+
+		/* wrap around edges */
+		if (pixel_index == 0) {
+			left_pixel = last_pixel_index;
+		} else if (pixel_index == last_pixel_index) {
+			right_pixel = 0;
+		}
+
+		/* convert to rule index */
+		for (int channel = 0; channel < 3; ++channel) {
+			uint8_t rule_index = 0;
+			if (src[left_pixel + channel] == PIXEL_ON) {
+				rule_index |= 4;
+			}
+			if (src[pixel_index + channel] == PIXEL_ON) {
+				rule_index |= 2;
+			}
+			if (src[right_pixel + channel] == PIXEL_ON) {
+				rule_index |= 1;
+			}
+
+			bool fill_pixel = (options.rules[channel] >> rule_index) & 1;
+			dst[pixel_index + channel] = fill_pixel ? PIXEL_ON : PIXEL_OFF;
+		}
+
+	}
+}
+
+void get_next_generation_directional(uint8_t* dst, const uint8_t* src, size_t w) {
+	size_t last_pixel_index = (w - 1) * 3;
+	for (size_t i = 0; i < w; ++i) {
+		size_t pixel_index = i * 3;
+		size_t left_pixel  = pixel_index - 3;
+		size_t right_pixel = pixel_index + 3;
+
+		/* wrap around edges */
+		if (pixel_index == 0) {
+			left_pixel = last_pixel_index;
+		} else if (pixel_index == last_pixel_index) {
+			right_pixel = 0;
+		}
+
+		bool pixel_set = false;
+		bool left_set  = false;
+		bool right_set = false;
+
+		for (int channel = 0; channel < 3; ++channel) {
+			if (src[left_pixel + channel] != PIXEL_OFF) {
+				left_set = true;
+			}
+			if (src[pixel_index + channel] != PIXEL_OFF) {
+				pixel_set = true;
+			}
+			if (src[right_pixel + channel] != PIXEL_OFF) {
+				right_set = true;
+			}
+		}
+
+		/* convert to rule index */
+		uint8_t rule_index = 0;
+		if (left_set) {
+			rule_index |= 4;
+		}
+		if (pixel_set) {
+			rule_index |= 2;
+		}
+		if (right_set) {
+			rule_index |= 1;
+		}
+
+		bool fill_pixel = ((options.rules[0] >> rule_index) & 1) == 1;
+		if (fill_pixel) {
+			dst[pixel_index    ] = left_set  ? PIXEL_ON : PIXEL_HALF;
+			dst[pixel_index + 1] = pixel_set ? PIXEL_ON : PIXEL_HALF;
+			dst[pixel_index + 2] = right_set ? PIXEL_ON : PIXEL_HALF;
+		}
+	}
+}
+
+void get_next_generation(uint8_t* dst, const uint8_t* src, size_t w) {
+	switch (options.mode) {
+		default:
+		case MODE_STANDARD: {
+			get_next_generation_standard(dst, src, w);
+			break;
+		}
+		case MODE_SPLIT: {
+			get_next_generation_split(dst, src, w);
+			break;
+		}
+		case MODE_DIRECTIONAL: {
+			get_next_generation_directional(dst, src, w);
+			break;
+		}
 	}
 }
 
