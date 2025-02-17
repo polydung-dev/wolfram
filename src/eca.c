@@ -33,7 +33,7 @@ uint8_t get_complement_rule(uint8_t r) {
 }
 
 /* populates an initial generation */
-void eca_initialise(uint8_t* dst, size_t width, size_t channel_count) {
+void eca_initialise(uint8_t* dst, size_t width, int channel_count) {
 	size_t row_size = width * channel_count;
 	memset(dst, pixel_off, row_size);
 
@@ -42,7 +42,7 @@ void eca_initialise(uint8_t* dst, size_t width, size_t channel_count) {
 }
 
 
-void eca_initialise_alternate(uint8_t* dst, size_t width, size_t channel_count) {
+void eca_initialise_alternate(uint8_t* dst, size_t width, int channel_count) {
 	size_t row_size = width * channel_count;
 	memset(dst, pixel_off, row_size);
 
@@ -52,7 +52,7 @@ void eca_initialise_alternate(uint8_t* dst, size_t width, size_t channel_count) 
 	}
 }
 
-void eca_initialise_random(uint8_t* dst, size_t width, size_t channel_count) {
+void eca_initialise_random(uint8_t* dst, size_t width, int channel_count) {
 	size_t row_size = width * channel_count;
 	memset(dst, pixel_off, row_size);
 
@@ -65,13 +65,14 @@ void eca_initialise_random(uint8_t* dst, size_t width, size_t channel_count) {
 
 /* generates the next generation */
 void eca_generate(
-	uint8_t* dst, const uint8_t* src, size_t width, uint8_t rules[3]
+	uint8_t* dst, const uint8_t* src, size_t width, int channel_count,
+	uint8_t rules[channel_count]
 ) {
-	size_t last_pixel_index = (width - 1) * 3;
+	size_t last_pixel_index = (width - 1) * channel_count;
 	for (size_t i = 0; i < width; ++i) {
-		size_t pixel_index = i * 3;
-		size_t left_pixel  = pixel_index - 3;
-		size_t right_pixel = pixel_index + 3;
+		size_t pixel_index = i * channel_count;
+		size_t left_pixel  = pixel_index - channel_count;
+		size_t right_pixel = pixel_index + channel_count;
 
 		/* wrap around edges */
 		if (pixel_index == 0) {
@@ -94,19 +95,20 @@ void eca_generate(
 
 		bool fill_pixel = ((rules[0] >> rule_index) & 1) == 1;
 		if (fill_pixel) {
-			memset(dst + pixel_index, pixel_on, 3);
+			memset(dst + pixel_index, pixel_on, channel_count);
 		}
 	}
 }
 
 void eca_generate_split(
-	uint8_t* dst, const uint8_t* src, size_t width, uint8_t rules[3]
+	uint8_t* dst, const uint8_t* src, size_t width, int channel_count,
+	uint8_t rules[channel_count]
 ) {
-	size_t last_pixel_index = (width - 1) * 3;
+	size_t last_pixel_index = (width - 1) * channel_count;
 	for (size_t i = 0; i < width; ++i) {
-		size_t pixel_index = i * 3;
-		size_t left_pixel  = pixel_index - 3;
-		size_t right_pixel = pixel_index + 3;
+		size_t pixel_index = i * channel_count;
+		size_t left_pixel  = pixel_index - channel_count;
+		size_t right_pixel = pixel_index + channel_count;
 
 		/* wrap around edges */
 		if (pixel_index == 0) {
@@ -138,13 +140,14 @@ void eca_generate_split(
 }
 
 void eca_generate_directional(
-	uint8_t* dst, const uint8_t* src, size_t width, uint8_t rules[3]
+	uint8_t* dst, const uint8_t* src, size_t width, int channel_count,
+	uint8_t rules[channel_count]
 ) {
-	size_t last_pixel_index = (width - 1) * 3;
+	size_t last_pixel_index = (width - 1) * channel_count;
 	for (size_t i = 0; i < width; ++i) {
-		size_t pixel_index = i * 3;
-		size_t left_pixel  = pixel_index - 3;
-		size_t right_pixel = pixel_index + 3;
+		size_t pixel_index = i * channel_count;
+		size_t left_pixel  = pixel_index - channel_count;
+		size_t right_pixel = pixel_index + channel_count;
 
 		/* wrap around edges */
 		if (pixel_index == 0) {
@@ -157,7 +160,7 @@ void eca_generate_directional(
 		bool left_set  = false;
 		bool right_set = false;
 
-		for (int channel = 0; channel < 3; ++channel) {
+		for (int channel = 0; channel < channel_count; ++channel) {
 			if (src[left_pixel + channel] != pixel_off) {
 				left_set = true;
 			}

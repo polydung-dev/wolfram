@@ -196,7 +196,7 @@ int main(int argc, char* argv[]) {
 	for (size_t i = 0; i < window_height - 1; ++i) {
 		uint8_t* current = display_buffer + ((row_size) * i);
 		uint8_t* next = current + (row_size);
-		gen_fn(next, current, window_width, options.rules);
+		gen_fn(next, current, window_width, 3, options.rules);
 	}
 
 	/* display texture ***************************************************/
